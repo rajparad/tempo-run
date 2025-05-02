@@ -13,6 +13,16 @@ class SpotifyManager: NSObject, ObservableObject {
     @Published var playlistTracks: [SpotifyTrack] = []
     @Published var queuedSongs: [SpotifyTrack] = []
     
+    @Published var userId: String = "demo-user"  // Replace after login or anonymous auth
+    @Published var currentTrackId: String = ""
+    @Published var currentTitle: String = ""
+    @Published var currentArtist: String = ""
+    @Published var currentBPM: Double? = nil
+    @Published var currentGenre: String? = nil
+
+    var songIdCache: [String: String] = [:]  // Optional: to cache song ID lookups
+
+    
     private var playbackTimer: Timer?
     
     struct Playlist: Identifiable {
@@ -54,6 +64,29 @@ class SpotifyManager: NSObject, ObservableObject {
         session.start()
     }
     
+    func fetchSpotifyUserId() {
+        guard let token = accessToken else { return }
+
+        let url = URL(string: "https://api.spotify.com/v1/me")!
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        URLSession.shared.dataTask(with: request) { data, _, _ in
+            guard let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let id = json["id"] as? String else {
+                print("❌ Failed to get Spotify user ID")
+                return
+            }
+
+            DispatchQueue.main.async {
+                self.userId = id
+                print("✅ Set userId from Spotify: \(id)")
+            }
+        }.resume()
+    }
+
+    
     private func exchangeCodeForToken(code: String) {
         guard let url = URL(string: "https://accounts.spotify.com/api/token") else { return }
         
@@ -70,6 +103,7 @@ class SpotifyManager: NSObject, ObservableObject {
                     self.accessToken = token
                     self.isLoggedIn = true
                     self.startPollingPlayback()
+                    self.fetchSpotifyUserId()
                 }
             }
         }.resume()
@@ -113,7 +147,14 @@ class SpotifyManager: NSObject, ObservableObject {
                let artistName = artists.first?["name"] as? String {
                 
                 DispatchQueue.main.async {
+                    self.currentTitle = name
+                    self.currentArtist = artistName
+                    self.currentTrackId = item["id"] as? String ?? ""
+                    self.currentBPM = self.playlistTracks.first(where: { $0.name == name && $0.artist == artistName })?.bpm ?? 0
+                    self.currentGenre = nil  // you can enrich this later if you pull genre
                     self.currentSong = "\(name) - \(artistName)"
+                    self.songIdCache[self.currentSong] = self.currentTrackId
+
                     print("🎵 Now Playing: \(self.currentSong)")
                 }
                 
@@ -353,46 +394,50 @@ class SpotifyManager: NSObject, ObservableObject {
         }
 
         let currentSongName = currentSong.trimmingCharacters(in: .whitespacesAndNewlines)
-        let currentTrack = playlistTracks.first(where: { track in
-            let trackName = "\(track.name) - \(track.artist)".trimmingCharacters(in: .whitespacesAndNewlines)
-            return trackName.lowercased() == currentSongName.lowercased()
-        })
-        
-        let currentBPM = currentTrack?.bpm ?? 115.0
-        
-        print("🎯 Current BPM: \(currentBPM) | Current Pace: \(currentPace) | Target Pace: \(targetPace)")
-        
-        let paceDelta = currentPace - targetPace
-        
-        // Filter based on direction
-        let candidates: [SpotifyTrack]
-        if paceDelta > 0 {
-            candidates = playlistTracks.filter { ($0.bpm ?? 0) > currentBPM }
-        } else {
-            candidates = playlistTracks.filter { ($0.bpm ?? 0) < currentBPM }
+        let currentTrack = playlistTracks.first { track in
+            let fullName = "\(track.name) - \(track.artist)"
+            return fullName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == currentSongName.lowercased()
         }
 
-        guard !candidates.isEmpty else {
-            print("❌ No suitable candidates to queue.")
+        let currentBPM = currentTrack?.bpm ?? 115.0
+        let paceDelta = currentPace - targetPace
+        let idealBPM = paceDelta > 0 ? currentBPM + 10 : currentBPM - 10
+
+        print("🎯 Current BPM: \(currentBPM) | Current Pace: \(currentPace) | Target Pace: \(targetPace)")
+
+        // 🔍 Filter unplayed, eligible songs
+        let unplayed = playlistTracks.filter { track in
+            !queuedSongs.contains(where: { $0.id == track.id }) &&
+            track.id != currentTrack?.id
+        }
+
+        guard !unplayed.isEmpty else {
+            print("❌ No unplayed songs left to queue.")
             return
         }
-        
-        // 🧠 Sort candidates: prioritize ones closer to "perfect" bpm change
-        let sortedCandidates = candidates.sorted { a, b in
-            let aDelta = abs((a.bpm ?? 0) - (currentBPM + (paceDelta > 0 ? 10 : -10)))
-            let bDelta = abs((b.bpm ?? 0) - (currentBPM + (paceDelta > 0 ? 10 : -10)))
-            return aDelta < bDelta
+
+        // 🧠 Score songs by closeness to ideal BPM
+        let scored = unplayed.compactMap { track -> (SpotifyTrack, Double)? in
+            guard let bpm = track.bpm else { return nil }
+            let score = abs(bpm - idealBPM)
+            return (track, score)
         }
 
-        // 🎲 Pick randomly among top 5 candidates
-        let topCandidates = Array(sortedCandidates.prefix(5))
-        if let nextTrack = topCandidates.randomElement() {
-            print("✅ Queuing smarter song: \(nextTrack.name) by \(nextTrack.artist) (BPM: \(nextTrack.bpm ?? 0))")
-            queueTrack(trackId: nextTrack.id)
-        } else {
-            print("❌ Couldn't find a top track to queue")
+        let sorted = scored.sorted { $0.1 < $1.1 }
+        let topCandidates = Array(sorted.prefix(5)).map { $0.0 }
+
+        guard let nextTrack = topCandidates.randomElement() else {
+            print("❌ Couldn't pick a top track to queue.")
+            return
         }
+
+        // 🎵 Queue it!
+        queueTrack(trackId: nextTrack.id)
+        queuedSongs.append(nextTrack)
+
+        print("✅ Queued: \(nextTrack.name) by \(nextTrack.artist) (BPM: \(nextTrack.bpm ?? 0))")
     }
+
 
     
     // Store the last known song
@@ -441,3 +486,4 @@ extension SpotifyManager: ASWebAuthenticationPresentationContextProviding {
         return UIApplication.shared.windows.first { $0.isKeyWindow } ?? ASPresentationAnchor()
     }
 }
+

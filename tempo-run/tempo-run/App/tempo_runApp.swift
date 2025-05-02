@@ -7,7 +7,7 @@ struct TempoRunApp: App {
 
 
     init() {
-        // FirebaseApp.configure() // Remove this line if you're not using Firebase yet
+        FirebaseApp.configure() 
     }
 
     var body: some Scene {
