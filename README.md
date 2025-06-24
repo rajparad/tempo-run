@@ -1,51 +1,92 @@
-# 👟 Tempo Run
+# Tempo Run – Technical Overview 🏃‍♀️🎶
 
-An AI-powered iOS app that dynamically adjusts your Spotify queue to help you run faster based on your pace!
+Tempo Run is an AI-powered iOS app that dynamically adjusts your Spotify playlist queue based on your real-time pace to help you run smarter and stay in the zone.
+![tempo-run-screens](https://github.com/user-attachments/assets/7b48ae25-be9a-4081-88d9-75422c133850)
 
-Demo Video: https://drive.google.com/file/d/1dQJG858_CcR8VxXoUSls_MV5Ij5j_-_z/view?usp=drive_link
+---
 
-## 📜 Overview
+## 📲 User Flow & Spotify Integration
 
-Tempo Run connects to your Spotify account, detects your current song, analyzes your running pace, and intelligently queues better songs to help you match your target pace!
+1. **Spotify Authentication**
+   - Users authenticate via OAuth 2.0 using the Spotify iOS SDK.
+   - A custom redirect URI (`temperun://callback`) completes the auth loop.
 
+2. **Establishing Connection**
+   - Once authenticated, the app connects to the Spotify App Remote SDK to fetch live playback and control queue.
 
-Tempo Run is more than a playlist manager. It’s the first step toward AI-powered adaptive workouts, where your music reacts in real time to your body’s performance — enhancing your running experience, mood, and results.
+3. **Fetching Current Playlist**
+   - The currently playing playlist is identified.
+   - All songs from this playlist are retrieved via the Spotify Web API.
 
-### Features:
+4. **Enriching Song Metadata**
+   - Each song is enriched with:
+     - BPM and other audio features (via Spotify API)
+     - If unavailable, fallback methods:
+       - **Groq AI** model generates estimated features.
+       - **SongBPM.com** is scraped as a last resort.
 
-- 📀 Detects your currently playing playlist and tracks.
-- 🏃 Offers Simulated Run (manual pace slider) or Live Run (GPS-based pace tracking).
-- 🤖 Uses BPM analysis to dynamically adjust the queue.
-- 🛟 Falls back to Groq AI API or web scraping SongBPM.com if BPM info is missing.
-- 🔗 Built with Spotify's OAuth authentication, with a secure callback.php redirect.
-- 📈 Summarizes your run with pace statistics and songs played.
+---
 
-## 📂 Project Structure
+## 🧠 Machine Learning Model (Google Cloud Hosted)
 
-| File/Folder | Purpose |
-|-------------|---------|
-| HomeView.swift | Main landing page. Choose Simulated Run or Live Run. |
-| RunView.swift | Simulated Run mode: adjust your pace manually. |
-| LiveRunView.swift | Live Run mode: use GPS tracking for actual running pace. |
-| RunSummaryView.swift | After ending a run, see a summary of your songs and average pace. |
-| SpotifyManager.swift | Handles all Spotify authentication, playback info fetching, queueing logic, BPM fetching, etc. |
-| RunManager.swift | GPS-based tracking of distance and calculation of real pace. |
-| Env.swift | Placeholder environment file for API keys and secrets (no sensitive data). |
-| callback.php | Lightweight PHP file hosted on server for handling Spotify OAuth redirect. |
+- A custom ML model is hosted on **Google Cloud Run**.
+- Trained on each user's **run history** + **song metadata**.
+- Predicts the best next song to queue based on:
+  - Target pace
+  - Current pace
+  - Past performance with similar songs
 
-## ⚙️ Setup Instructions
+**With every run, the model retrains**, becoming more personalized and accurate over time.
 
-1. Clone the repository:
+---
+
+## 🔥 Real-Time Queueing
+
+Once the user starts a run:
+
+1. The app monitors pace in real-time.
+2. After each song, the pace is logged.
+3. The backend fetches the best next track using the ML model.
+4. That track is added to the Spotify queue instantly.
+
+---
+
+## ☁️ Firebase Integration
+
+- **Firestore** stores:
+  - Song performance logs
+  - Run summaries (distance, pace, time)
+  - Metadata enrichment
+- **Functions** may be used to trigger retraining after each run.
+
+---
+
+## 🧪 Tech Stack
+
+### Frontend
+- SwiftUI (iOS)
+- Spotify iOS SDK (App Remote + Auth)
+
+### Backend
+- FastAPI + Python
+- Hosted on Google Cloud Run
+
+### ML & Metadata
+- Custom ML model using scikit-learn
+- Groq API + SongBPM scraping
+- Firebase Firestore for structured data storage
+
+---
+
+## 🚀 Setup
+
+Clone the repository:
 ```bash
 git clone https://github.com/sanyachaw1a/tempo-run.git
 ```
 
-2. Open the project in Xcode.
-
-3. **Important**: Fill in your own API keys! After cloning, open `Env.swift` and replace placeholders with your actual credentials:
+Open in Xcode and fill in your credentials in `Env.swift`:
 ```swift
-import Foundation
-
 struct Env {
     static let spotifyClientId = "<YOUR_SPOTIFY_CLIENT_ID>"
     static let spotifyClientSecret = "<YOUR_SPOTIFY_CLIENT_SECRET>"
@@ -54,20 +95,8 @@ struct Env {
 }
 ```
 
-4. Make sure your Spotify app is configured to redirect to your server's callback.php properly.
+Build and run on a real iOS device (location tracking requires hardware).
 
-5. Build and run on a physical iOS device (location tracking requires real hardware).
+---
 
-## 🌎 External APIs Used
-
-**Spotify Web API**
-- 🔹 Authentication (OAuth 2.0)
-- 🔹 Playback control, now playing info, queue control.
-
-**Groq AI API** (via custom PHP server)
-- 🔹 Used as backup BPM estimation when Spotify lacks audio features.
-
-**SongBPM.com Scraping**
-- 🔹 If BPM cannot be found via Spotify or Groq, a simple web scraper fetches from SongBPM.com.
-
-🚀 ✨ Built with love, music, and a lot of running shoes 👟.
+For questions or access, contact: **sanyachawla75@gmail.com**
