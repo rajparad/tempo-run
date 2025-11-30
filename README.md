@@ -4,6 +4,8 @@
 
 This guide tells the story of how authentication works in practice, using Spotify as our running example. We'll focus on the *why* and *when*, with code references for the curious.
 
+> **Part of:** [sanyachaw1a/tempo-run](https://github.com/sanyachaw1a/tempo-run) - An AI-powered iOS app that dynamically adjusts your Spotify queue based on your running pace.
+
 ---
 
 ## 📖 The Story: Why We Need OAuth
@@ -587,7 +589,7 @@ That's it. Everything else (PKCE, Keychain, token refresh) is just securing the 
 ## 📂 Repository Structure Reference
 
 ```
-rejaparad/temp-run/
+tempo-run/
 ├── Authentication/
 │   ├── Services/
 │   │   ├── OAuthService.swift          ← Main OAuth flow + token exchange
@@ -626,6 +628,16 @@ rejaparad/temp-run/
 | SwiftUI integration | `Authentication/ViewModels/AuthViewModel.swift` |
 | Configure endpoints | `Authentication/Services/OAuthConfig.swift` |
 | Handle errors | `Authentication/Models/OAuthError.swift` |
+
+---
+
+## 🔗 Resources & References
+
+- **Main-Repository taken as reference:** [sanyachaw1a/tempo-run](https://github.com/sanyachaw1a/tempo-run)
+- **Spotify iOS SDK:** [Spotify Developer](https://developer.spotify.com/documentation/ios)
+- **OAuth 2.0 Spec:** [RFC 6749](https://tools.ietf.org/html/rfc6749)
+- **PKCE Spec:** [RFC 7636](https://tools.ietf.org/html/rfc7636)
+- **Apple AuthenticationServices:** [Developer Documentation](https://developer.apple.com/documentation/authenticationservices)
 
 ---
 
